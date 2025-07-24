@@ -18,7 +18,7 @@ async function fetchQBOData(realmId, token, endpoint) {
   return JSON.parse(response.body);
 }
 
-// ✅ Route: /qbo/:realmId/:resource
+// 📂 routes/qboData.js
 router.get('/:realmId/:resource', async (req, res) => {
   const { realmId, resource } = req.params;
   const allowedResources = ['accounts', 'invoices', 'vendors'];
@@ -29,7 +29,7 @@ router.get('/:realmId/:resource', async (req, res) => {
 
   try {
     const doc = await db.collection('qbo_tokens').doc(realmId).get();
-    if (!doc.exists) return res.status(404).send('❌ Token not found.');
+    if (!doc.exists) return res.status(404).send('❌ No token found for that realmId');
 
     const tokenData = doc.data();
     const accessToken = await refreshTokenIfNeeded(realmId, tokenData);
