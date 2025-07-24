@@ -1,7 +1,7 @@
 const express = require('express');
 const OAuthClient = require('intuit-oauth');
 const admin = require('firebase-admin');
-const refreshTokenIfNeeded = require('../utils/refreshToken');
+const refreshTokenIfNeeded = require('../utils/refreshTokens');
 
 const router = express.Router();
 const db = admin.firestore();
