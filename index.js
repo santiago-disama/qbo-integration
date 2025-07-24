@@ -2,54 +2,47 @@ require('dotenv').config();
 const express = require('express');
 const OAuthClient = require('intuit-oauth');
 const admin = require('firebase-admin');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// 🔐 Initialize Firebase Admin
-const fs = require('fs');
+// 🔐 Firebase Admin
 const serviceAccount = JSON.parse(fs.readFileSync('/etc/secrets/firebase-service-account.json', 'utf8'));
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
-
+admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 
-const path = require('path');
+// 🛣️ Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-const qboDataRoutes = require('./routes/qboData');
-app.use('/qbo', qboDataRoutes);
-
-// 🔐 QuickBooks OAuth config
+// 🔐 QuickBooks OAuth
 const oauthClient = new OAuthClient({
   clientId: process.env.QBO_CLIENT_ID,
   clientSecret: process.env.QBO_CLIENT_SECRET,
-  environment: process.env.ENVIRONMENT, // 'sandbox' or 'production'
+  environment: process.env.ENVIRONMENT,
   redirectUri: process.env.QBO_REDIRECT_URI
 });
 
-// 🌐 Step 1: Redirect to QuickBooks login
+const refreshTokenIfNeeded = require('./utils/refreshToken');
+
+// 🌐 Step 1: Start OAuth
 app.get('/', (req, res) => {
   const authUri = oauthClient.authorizeUri({
     scope: [OAuthClient.scopes.Accounting],
     state: 'intuit-test'
   });
-
   console.log('🔗 OAuth URL:', authUri);
   res.redirect(authUri);
 });
 
-// 🔄 Step 2: Callback from QuickBooks
+// 🔄 Step 2: Callback
 app.get('/callback', async (req, res) => {
   try {
     const token = await oauthClient.createToken(req.url);
     const tokenData = token.getToken();
-
     const realmId = tokenData.realmId;
 
-    // 📝 Store in Firestore
     await db.collection('qbo_tokens').doc(realmId).set({
       access_token: tokenData.access_token,
       refresh_token: tokenData.refresh_token,
@@ -60,52 +53,42 @@ app.get('/callback', async (req, res) => {
     });
 
     console.log('✅ Token stored for realm:', realmId);
-    res.redirect('/dashboard.html');
+    res.send(`✅ Authorization complete! Use /company-info/${realmId}`);
   } catch (error) {
     console.error('❌ Callback Error:', error);
     res.status(500).send('❌ Error during OAuth callback.');
   }
 });
 
-// 📊 Step 3: Get company info
-const refreshTokenIfNeeded = require('./utils/refreshToken');
-
-app.get('/company-info', async (req, res) => {
+// 📊 Company Info
+app.get('/company-info/:realmId', async (req, res) => {
+  const realmId = req.params.realmId;
   try {
-    const realmId = process.env.TEST_REALM_ID;
     const doc = await db.collection('qbo_tokens').doc(realmId).get();
-
-    if (!doc.exists) {
-      return res.status(404).send('❌ No token found. Authorize first.');
-    }
+    if (!doc.exists) return res.status(404).send('❌ Token not found');
 
     const tokenData = doc.data();
     const accessToken = await refreshTokenIfNeeded(realmId, tokenData);
-
     const url = `v3/company/${realmId}/companyinfo/${realmId}`;
-    const response = await oauthClient.makeApiCall({ url, token: accessToken });
 
+    const response = await oauthClient.makeApiCall({ url, token: accessToken });
     res.json(JSON.parse(response.body));
   } catch (error) {
-    console.error('❌ API Error:', error);
-    res.status(500).send('❌ Could not fetch company info.');
+    console.error('❌ Company info fetch failed:', error);
+    res.status(500).send('❌ Failed to fetch company info');
   }
 });
 
-// 📄 Get list of accounts
-app.get('/qbo/accounts', async (req, res) => {
+// 📄 Accounts
+app.get('/accounts/:realmId', async (req, res) => {
+  const realmId = req.params.realmId;
   try {
-    const realmId = process.env.TEST_REALM_ID;
     const doc = await db.collection('qbo_tokens').doc(realmId).get();
     if (!doc.exists) return res.status(404).send('❌ Token not found');
-    
-    const tokenData = doc.data();
-    const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/accounts`;
 
-    const response = await oauthClient.makeApiCall({
-      url,
-      token: tokenData.access_token
-    });
+    const tokenData = doc.data();
+    const url = `v3/company/${realmId}/accounts`;
+    const response = await oauthClient.makeApiCall({ url, token: tokenData.access_token });
 
     res.json(JSON.parse(response.body));
   } catch (error) {
@@ -114,20 +97,16 @@ app.get('/qbo/accounts', async (req, res) => {
   }
 });
 
-// 📄 Get list of vendors
-app.get('/qbo/vendors', async (req, res) => {
+// 📄 Vendors
+app.get('/vendors/:realmId', async (req, res) => {
+  const realmId = req.params.realmId;
   try {
-    const realmId = process.env.TEST_REALM_ID;
     const doc = await db.collection('qbo_tokens').doc(realmId).get();
     if (!doc.exists) return res.status(404).send('❌ Token not found');
 
     const tokenData = doc.data();
-    const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/vendor`;
-
-    const response = await oauthClient.makeApiCall({
-      url,
-      token: tokenData.access_token
-    });
+    const url = `v3/company/${realmId}/vendor`;
+    const response = await oauthClient.makeApiCall({ url, token: tokenData.access_token });
 
     res.json(JSON.parse(response.body));
   } catch (error) {
@@ -136,24 +115,25 @@ app.get('/qbo/vendors', async (req, res) => {
   }
 });
 
-// 📄 Get list of invoices
-app.get('/qbo/invoices', async (req, res) => {
+// 📄 Invoices
+app.get('/invoices/:realmId', async (req, res) => {
+  const realmId = req.params.realmId;
   try {
-    const realmId = process.env.TEST_REALM_ID;
     const doc = await db.collection('qbo_tokens').doc(realmId).get();
     if (!doc.exists) return res.status(404).send('❌ Token not found');
 
     const tokenData = doc.data();
-    const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/invoice`;
-
-    const response = await oauthClient.makeApiCall({
-      url,
-      token: tokenData.access_token
-    });
+    const url = `v3/company/${realmId}/invoice`;
+    const response = await oauthClient.makeApiCall({ url, token: tokenData.access_token });
 
     res.json(JSON.parse(response.body));
   } catch (error) {
     console.error('❌ Invoices fetch failed:', error);
     res.status(500).send('❌ Failed to fetch invoices');
   }
+});
+
+// ✅ Start the server
+app.listen(port, () => {
+  console.log(`🚀 Server running on port ${port}`);
 });

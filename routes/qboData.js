@@ -13,15 +13,16 @@ const oauthClient = new OAuthClient({
   redirectUri: process.env.QBO_REDIRECT_URI
 });
 
+// Utility function
 async function fetchQBOData(realmId, token, endpoint) {
   const url = `v3/company/${realmId}/${endpoint}`;
   const response = await oauthClient.makeApiCall({ url, token });
   return JSON.parse(response.body);
 }
 
-// Example: /qbo/accounts, /qbo/invoices, /qbo/vendors
-router.get('/:resource', async (req, res) => {
-  const { resource } = req.params;
+// ✅ Dynamic route: /qbo/:realmId/:resource
+router.get('/:realmId/:resource', async (req, res) => {
+  const { realmId, resource } = req.params;
   const allowedResources = ['accounts', 'invoices', 'vendors'];
 
   if (!allowedResources.includes(resource)) {
@@ -29,7 +30,6 @@ router.get('/:resource', async (req, res) => {
   }
 
   try {
-    const realmId = process.env.TEST_REALM_ID;
     const doc = await db.collection('qbo_tokens').doc(realmId).get();
 
     if (!doc.exists) return res.status(404).send('❌ No token found.');
