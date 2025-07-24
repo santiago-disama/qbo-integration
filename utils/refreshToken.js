@@ -1,6 +1,7 @@
 const { db } = require('../utils/firebase');
 const OAuthClient = require('intuit-oauth');
 
+// 🔐 Initialize OAuth client
 const oauthClient = new OAuthClient({
   clientId: process.env.QBO_CLIENT_ID,
   clientSecret: process.env.QBO_CLIENT_SECRET,
@@ -8,39 +9,41 @@ const oauthClient = new OAuthClient({
   redirectUri: process.env.QBO_REDIRECT_URI
 });
 
+// 🔁 Check if token is expired and refresh if needed
 async function refreshTokenIfNeeded(realmId, tokenData) {
   try {
-    console.log('🧠 Checking token expiration for realm:', realmId);
-    console.log('🔍 Stored token data:', tokenData);
+    console.log(`🧠 Checking token for realmId: ${realmId}`);
 
-    if (!tokenData.created_at || !tokenData.expires_in) {
-      console.warn('⚠️ Missing created_at or expires_in — forcing refresh.');
+    const { access_token, refresh_token, created_at, expires_in } = tokenData;
+
+    // ⚠️ Defensive check
+    if (!refresh_token) {
+      throw new Error('Missing refresh_token');
     }
 
-    const expiresAt = new Date(tokenData.created_at || 0);
-    expiresAt.setSeconds(expiresAt.getSeconds() + (tokenData.expires_in || 0));
+    const issuedAt = created_at ? new Date(created_at) : new Date(0);
+    const expiresAt = new Date(issuedAt.getTime() + ((expires_in || 3600) * 1000));
 
-    if (new Date() < expiresAt && tokenData.access_token) {
-      console.log('✅ Token still valid — using stored token.');
-      return tokenData.access_token;
+    if (access_token && new Date() < expiresAt) {
+      console.log('✅ Token is still valid — no refresh needed');
+      return access_token;
     }
 
-    console.log('🔁 Token expired — refreshing...');
+    console.log('🔄 Token expired or invalid — refreshing using refresh_token...');
 
-    const token = await oauthClient.refreshUsingToken(tokenData.refresh_token);
-    const newTokenData = token.getToken();
-
-    console.log('✅ Token successfully refreshed');
+    const refreshed = await oauthClient.refreshUsingToken(refresh_token);
+    const newToken = refreshed.getToken();
 
     await db.collection('qbo_tokens').doc(realmId).set({
-      ...newTokenData,
+      ...newToken,
       created_at: new Date().toISOString()
     });
 
-    return newTokenData.access_token;
+    console.log('✅ Token refreshed and saved');
+    return newToken.access_token;
   } catch (err) {
-    console.error('❌ Failed to refresh token:', err.response?.body || err.message || err);
-    throw err;
+    console.error('❌ Token refresh failed:', err.response?.body || err.message || err);
+    throw new Error(`Failed to refresh token for realmId ${realmId}`);
   }
 }
 
