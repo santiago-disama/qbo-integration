@@ -12,17 +12,22 @@ const oauthClient = new OAuthClient({
   redirectUri: process.env.QBO_REDIRECT_URI
 });
 
-async function fetchQBOData(realmId, token, endpoint) {
-  const baseURL = process.env.ENVIRONMENT === 'sandbox'
+function getBaseUrl() {
+  return process.env.ENVIRONMENT === 'sandbox'
     ? 'https://sandbox-quickbooks.api.intuit.com'
     : 'https://quickbooks.api.intuit.com';
+}
 
+async function fetchQBOData(realmId, token, endpoint) {
+  const baseURL = getBaseUrl();
   const url = `${baseURL}/v3/company/${realmId}/${endpoint}`;
+  console.log('🌐 QBO API URL:', url);
+
   const response = await oauthClient.makeApiCall({ url, token });
   return JSON.parse(response.body);
 }
 
-// 📂 routes/qboData.js
+// 📂 Dynamic QBO Data Route
 router.get('/:realmId/:resource', async (req, res) => {
   const { realmId, resource } = req.params;
   const allowedResources = ['accounts', 'invoices', 'vendors'];
@@ -41,7 +46,7 @@ router.get('/:realmId/:resource', async (req, res) => {
     const result = await fetchQBOData(realmId, accessToken, resource);
     res.json(result);
   } catch (err) {
-    console.error(`❌ Failed to fetch ${resource}:`, err);
+    console.error(`❌ Failed to fetch ${resource} for realm ${realmId}:`, err.message || err);
     res.status(500).send(`❌ Error fetching ${resource}`);
   }
 });
