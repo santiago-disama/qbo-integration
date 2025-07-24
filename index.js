@@ -1,10 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const OAuthClient = require('intuit-oauth');
-const open = require('open').default;
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000; // Render uses dynamic ports
 
 const oauthClient = new OAuthClient({
   clientId: process.env.QBO_CLIENT_ID,
@@ -16,27 +15,36 @@ const oauthClient = new OAuthClient({
 let accessToken = '';
 let realmId = '';
 
+// ✅ Entry point to generate the OAuth URL
 app.get('/', async (req, res) => {
   const authUri = oauthClient.authorizeUri({
     scope: [OAuthClient.scopes.Accounting],
     state: 'intuit-test'
   });
-  await open(authUri);
-  res.send('Redirecting to QuickBooks...');
+
+  console.log("🔗 Open this URL to connect QuickBooks:\n" + authUri);
+  res.send('Check the Render logs for your QuickBooks login URL.');
 });
 
+// ✅ OAuth callback route
 app.get('/callback', async (req, res) => {
   try {
     const token = await oauthClient.createToken(req.url);
     accessToken = token.getToken().access_token;
     realmId = token.getToken().realmId;
-    res.send('Authorization successful! You can now query QuickBooks.');
+
+    console.log("✅ QBO Auth Successful");
+    console.log("Access Token:", accessToken);
+    console.log("Realm ID:", realmId);
+
+    res.send('✅ Authorization successful! You can now call /company-info');
   } catch (e) {
-    console.error(e);
+    console.error('❌ OAuth Error:', e);
     res.status(500).send('Error in callback');
   }
 });
 
+// ✅ Sample API route
 app.get('/company-info', async (req, res) => {
   if (!accessToken || !realmId) {
     return res.send('Please authorize first at root URL.');
@@ -47,11 +55,12 @@ app.get('/company-info', async (req, res) => {
     const response = await oauthClient.makeApiCall({ url });
     res.json(JSON.parse(response.body));
   } catch (e) {
-    console.error(e);
+    console.error('❌ API Error:', e);
     res.status(500).send('API call failed');
   }
 });
 
+// ✅ Listen on dynamic port for Render
 app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
+  console.log(`🚀 Server running on port ${port}`);
 });
