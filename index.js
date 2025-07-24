@@ -8,53 +8,56 @@ const port = process.env.PORT || 3000;
 const oauthClient = new OAuthClient({
   clientId: process.env.QBO_CLIENT_ID,
   clientSecret: process.env.QBO_CLIENT_SECRET,
-  environment: process.env.ENVIRONMENT,
-  redirectUri: process.env.QBO_REDIRECT_URI
+  environment: process.env.ENVIRONMENT, // 'sandbox' or 'production'
+  redirectUri: process.env.QBO_REDIRECT_URI // must match exactly what's in your QBO app settings
 });
 
 let accessToken = '';
 let realmId = '';
 
-app.get('/', async (req, res) => {
-  console.log("🔍 redirectUri from env:", process.env.QBO_REDIRECT_URI);
-
+// 🌐 Step 1: Redirect to QuickBooks authorization
+app.get('/', (req, res) => {
   const authUri = oauthClient.authorizeUri({
     scope: [OAuthClient.scopes.Accounting],
     state: 'intuit-test'
   });
 
-  console.log("🔗 OAuth URL generated:", authUri);
-  res.send('✅ Check the Render logs for the QuickBooks login URL.');
+  console.log('🔗 OAuth URL:', authUri);
+  res.redirect(authUri); // ✅ redirects user to Intuit login page
 });
 
+// ✅ Step 2: Callback route — exchanges code for token
 app.get('/callback', async (req, res) => {
   try {
     const token = await oauthClient.createToken(req.url);
     accessToken = token.getToken().access_token;
     realmId = token.getToken().realmId;
 
-    console.log("✅ QBO Authorization Successful");
-    console.log("Realm ID:", realmId);
+    console.log('✅ Authorization successful!');
+    console.log('Access Token:', accessToken);
+    console.log('Realm ID:', realmId);
 
-    res.send('✅ Authorization successful! You can now query /company-info');
-  } catch (e) {
-    console.error("❌ OAuth Callback Error:", e);
-    res.status(500).send('Error in callback');
+    res.send('✅ Authorization successful! You can now visit /company-info');
+  } catch (error) {
+    console.error('❌ Callback Error:', error);
+    res.status(500).send('❌ Error during token exchange. Check logs.');
   }
 });
 
+// 📊 Step 3: Fetch company info
 app.get('/company-info', async (req, res) => {
   if (!accessToken || !realmId) {
-    return res.send('❌ Please authorize first at root URL.');
+    return res.status(400).send('❌ You must authorize first at /.');
   }
 
   const url = `v3/company/${realmId}/companyinfo/${realmId}`;
+
   try {
     const response = await oauthClient.makeApiCall({ url });
     res.json(JSON.parse(response.body));
-  } catch (e) {
-    console.error("❌ API Call Error:", e);
-    res.status(500).send('API call failed');
+  } catch (error) {
+    console.error('❌ API Call Failed:', error);
+    res.status(500).send('❌ Failed to fetch company info');
   }
 });
 
