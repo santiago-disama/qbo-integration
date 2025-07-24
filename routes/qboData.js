@@ -1,10 +1,9 @@
 const express = require('express');
 const OAuthClient = require('intuit-oauth');
-const admin = require('firebase-admin');
+const { db } = require('../utils/firebase');
 const refreshTokenIfNeeded = require('../utils/refreshToken');
 
 const router = express.Router();
-const db = admin.firestore();
 
 const oauthClient = new OAuthClient({
   clientId: process.env.QBO_CLIENT_ID,
@@ -13,14 +12,13 @@ const oauthClient = new OAuthClient({
   redirectUri: process.env.QBO_REDIRECT_URI
 });
 
-// Utility function
 async function fetchQBOData(realmId, token, endpoint) {
   const url = `v3/company/${realmId}/${endpoint}`;
   const response = await oauthClient.makeApiCall({ url, token });
   return JSON.parse(response.body);
 }
 
-// ✅ Dynamic route: /qbo/:realmId/:resource
+// ✅ Route: /qbo/:realmId/:resource
 router.get('/:realmId/:resource', async (req, res) => {
   const { realmId, resource } = req.params;
   const allowedResources = ['accounts', 'invoices', 'vendors'];
@@ -31,8 +29,7 @@ router.get('/:realmId/:resource', async (req, res) => {
 
   try {
     const doc = await db.collection('qbo_tokens').doc(realmId).get();
-
-    if (!doc.exists) return res.status(404).send('❌ No token found.');
+    if (!doc.exists) return res.status(404).send('❌ Token not found.');
 
     const tokenData = doc.data();
     const accessToken = await refreshTokenIfNeeded(realmId, tokenData);
