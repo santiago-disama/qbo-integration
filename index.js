@@ -133,6 +133,8 @@ app.get('/invoices/:realmId', async (req, res) => {
   }
 });
 
+app.use('/qbo', require('./routes/qboData'));
+
 // ✅ Start the server
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
