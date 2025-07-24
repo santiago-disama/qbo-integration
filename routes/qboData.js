@@ -13,7 +13,7 @@ const oauthClient = new OAuthClient({
 });
 
 async function fetchQBOData(realmId, token, endpoint) {
-  const url = `v3/company/${realmId}/${endpoint}`;
+  const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/${endpoint}`;
   const response = await oauthClient.makeApiCall({ url, token });
   return JSON.parse(response.body);
 }
