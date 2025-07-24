@@ -1,7 +1,5 @@
+const { db } = require('../utils/firebase');
 const OAuthClient = require('intuit-oauth');
-const admin = require('firebase-admin');
-
-const db = admin.firestore();
 
 const oauthClient = new OAuthClient({
   clientId: process.env.QBO_CLIENT_ID,
