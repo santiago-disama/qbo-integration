@@ -10,15 +10,27 @@ const oauthClient = new OAuthClient({
 
 async function refreshTokenIfNeeded(realmId, tokenData) {
   try {
-    const expiresAt = new Date(tokenData.created_at);
-    expiresAt.setSeconds(expiresAt.getSeconds() + tokenData.expires_in);
+    console.log('🧠 Checking token expiration for realm:', realmId);
+    console.log('🔍 Stored token data:', tokenData);
 
-    if (new Date() < expiresAt) {
+    if (!tokenData.created_at || !tokenData.expires_in) {
+      console.warn('⚠️ Missing created_at or expires_in — forcing refresh.');
+    }
+
+    const expiresAt = new Date(tokenData.created_at || 0);
+    expiresAt.setSeconds(expiresAt.getSeconds() + (tokenData.expires_in || 0));
+
+    if (new Date() < expiresAt && tokenData.access_token) {
+      console.log('✅ Token still valid — using stored token.');
       return tokenData.access_token;
     }
 
+    console.log('🔁 Token expired — refreshing...');
+
     const token = await oauthClient.refreshUsingToken(tokenData.refresh_token);
     const newTokenData = token.getToken();
+
+    console.log('✅ Token successfully refreshed');
 
     await db.collection('qbo_tokens').doc(realmId).set({
       ...newTokenData,
@@ -27,7 +39,7 @@ async function refreshTokenIfNeeded(realmId, tokenData) {
 
     return newTokenData.access_token;
   } catch (err) {
-    console.error('❌ Failed to refresh token:', err);
+    console.error('❌ Failed to refresh token:', err.response?.body || err.message || err);
     throw err;
   }
 }
