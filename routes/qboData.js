@@ -26,13 +26,14 @@ async function fetchQBOData(realmId, accessToken, resource) {
   const url = `${baseUrl}/v3/company/${realmId}/${resource}`;
 
   console.log('🌐 QBO Request URL:', url);
-  console.log('🔑 Using access_token:', accessToken.slice(0, 20) + '...');
+  console.log('🔑 Using access_token:', accessToken?.slice(0, 20) + '...');
+
+  // Set the token on the client
+  oauthClient.setToken({ access_token: accessToken });
 
   try {
-    const response = await oauthClient.makeApiCall({
-      url,
-      token: accessToken
-    });
+    // Only pass the URL string to makeApiCall
+    const response = await oauthClient.makeApiCall(url);
     return JSON.parse(response.body);
   } catch (err) {
     console.error('❌ QBO API Error Body:', err?.response?.body || err.message || err);
@@ -40,42 +41,35 @@ async function fetchQBOData(realmId, accessToken, resource) {
   }
 }
 
-// ✅ Lightweight test route to verify token/realmId
+// ✅ Test route for companyinfo
 router.get('/:realmId/companyinfo', async (req, res) => {
   const { realmId } = req.params;
-
   try {
     const doc = await db.collection('qbo_tokens').doc(realmId).get();
-    if (!doc.exists) {
-      return res.status(404).send('❌ Token not found for that realmId.');
-    }
+    if (!doc.exists) return res.status(404).send('❌ Token not found');
 
     const tokenData = doc.data();
     const accessToken = await refreshTokenIfNeeded(realmId, tokenData);
 
-    const companyInfo = await fetchQBOData(realmId, accessToken, `companyinfo/${realmId}`);
-    res.json(companyInfo);
+    const info = await fetchQBOData(realmId, accessToken, `companyinfo/${realmId}`);
+    res.json(info);
   } catch (err) {
     console.error('❌ Failed to fetch companyinfo:', err?.response?.body || err.message);
     res.status(500).send('❌ Failed to fetch companyinfo');
   }
 });
 
-// 🚀 Generic Route: /qbo/:realmId/:resource
+// 🚀 Generic QBO resource route: /qbo/:realmId/:resource
 router.get('/:realmId/:resource', async (req, res) => {
   const { realmId, resource } = req.params;
-  const allowedResources = ['account', 'invoices', 'vendors'];
-
-  if (!allowedResources.includes(resource)) {
+  const allowed = ['account', 'invoices', 'vendors', 'companyinfo'];
+  if (!allowed.includes(resource)) {
     return res.status(400).send('❌ Invalid QBO resource.');
   }
 
   try {
     const doc = await db.collection('qbo_tokens').doc(realmId).get();
-    if (!doc.exists) {
-      console.warn(`⚠️ Token not found for realmId: ${realmId}`);
-      return res.status(404).send('❌ Token not found for that realmId.');
-    }
+    if (!doc.exists) return res.status(404).send('❌ Token not found');
 
     const tokenData = doc.data();
     const accessToken = await refreshTokenIfNeeded(realmId, tokenData);
@@ -83,7 +77,7 @@ router.get('/:realmId/:resource', async (req, res) => {
     const data = await fetchQBOData(realmId, accessToken, resource);
     res.json(data);
   } catch (err) {
-    console.error(`❌ Failed to fetch ${resource}:`, err?.response?.body || err.message || err);
+    console.error(`❌ Failed to fetch ${resource}:`, err?.response?.body || err.message);
     res.status(500).send(`❌ Failed to fetch ${resource}`);
   }
 });
