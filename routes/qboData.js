@@ -14,7 +14,7 @@ const oauthClient = new OAuthClient({
 });
 
 // 🌍 Base URL for QBO API
-function getBaseUrl() {
+def getBaseUrl() {
   return process.env.ENVIRONMENT === 'sandbox'
     ? 'https://sandbox-quickbooks.api.intuit.com'
     : 'https://quickbooks.api.intuit.com';
@@ -28,15 +28,18 @@ async function fetchQBOData(realmId, accessToken, resource) {
   console.log('🌐 QBO Request URL:', url);
   console.log('🔑 Using access_token:', accessToken?.slice(0, 20) + '...');
 
-  // Set the token on the client
+  // Set the current access token on the client
   oauthClient.setToken({ access_token: accessToken });
 
   try {
-    // Only pass the URL string to makeApiCall
-    const response = await oauthClient.makeApiCall(url);
+    // Make the API call by passing an options object
+    const response = await oauthClient.makeApiCall({
+      url,
+      headers: { Accept: 'application/json' }
+    });
     return JSON.parse(response.body);
   } catch (err) {
-    console.error('❌ QBO API Error Body:', err?.response?.body || err.message || err);
+    console.error('❌ QBO API Error Body:', err?.response?.body || err.message);
     throw err;
   }
 }
@@ -48,7 +51,7 @@ router.get('/:realmId/companyinfo', async (req, res) => {
     const doc = await db.collection('qbo_tokens').doc(realmId).get();
     if (!doc.exists) return res.status(404).send('❌ Token not found');
 
-    const tokenData = doc.data();
+    const tokenData   = doc.data();
     const accessToken = await refreshTokenIfNeeded(realmId, tokenData);
 
     const info = await fetchQBOData(realmId, accessToken, `companyinfo/${realmId}`);
@@ -71,7 +74,7 @@ router.get('/:realmId/:resource', async (req, res) => {
     const doc = await db.collection('qbo_tokens').doc(realmId).get();
     if (!doc.exists) return res.status(404).send('❌ Token not found');
 
-    const tokenData = doc.data();
+    const tokenData   = doc.data();
     const accessToken = await refreshTokenIfNeeded(realmId, tokenData);
 
     const data = await fetchQBOData(realmId, accessToken, resource);
@@ -83,4 +86,3 @@ router.get('/:realmId/:resource', async (req, res) => {
 });
 
 module.exports = router;
-
