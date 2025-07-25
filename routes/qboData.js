@@ -62,7 +62,7 @@ router.get('/:realmId/companyinfo', async (req, res) => {
 // 🚀 Generic Route: /qbo/:realmId/:resource
 router.get('/:realmId/:resource', async (req, res) => {
   const { realmId, resource } = req.params;
-  const allowedResources = ['accounts', 'invoices', 'vendors'];
+  const allowedResources = ['account', 'invoices', 'vendors'];
 
   if (!allowedResources.includes(resource)) {
     return res.status(400).send('❌ Invalid QBO resource.');
@@ -87,3 +87,4 @@ router.get('/:realmId/:resource', async (req, res) => {
 });
 
 module.exports = router;
+
