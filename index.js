@@ -50,11 +50,23 @@ app.get('/callback', async (req, res) => {
     // Build full URL (including host & protocol) for the OAuth SDK
     const callbackUrl = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
     const token = await oauthClient.createToken(callbackUrl);
+    const tokenJson = token.getJson();
 
-    // Save token.getJson() to Firestore or your DB here
-    // e.g. await admin.firestore().collection('qboTokens').doc(token.token.realmId).set(token.getJson());
+    // Extract realmId
+    const realmId = token.token.realmId;
+    if (!realmId) {
+      throw new Error('No realmId returned in token response');
+    }
 
-    res.json({ success: true, data: token.getJson() });
+    // Persist tokens + realmId to Firestore
+    await admin
+      .firestore()
+      .collection('qboTokens')
+      .doc(realmId)
+      .set({ ...tokenJson, realmId });
+
+    // Return realmId for immediate use
+    res.json({ success: true, realmId, data: tokenJson });
   } catch (err) {
     console.error('OAuth callback error:', err);
     res.status(500).json({ error: err.message });
