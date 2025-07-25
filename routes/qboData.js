@@ -21,17 +21,16 @@ function getBaseUrl() {
 }
 
 // 📡 General QBO API Fetcher
-async function fetchQBOData(realmId, accessToken, resource) {
+async function fetchQBOData(realmId, tokenObject, resource) {
   const baseUrl = getBaseUrl();
   const url = `${baseUrl}/v3/company/${realmId}/${resource}`;
 
   console.log('🌐 QBO Request URL:', url);
-  console.log('🔑 Using access_token:', accessToken.slice(0, 20) + '...');
 
   try {
     const response = await oauthClient.makeApiCall({
       url,
-      token: accessToken,
+      token: tokenObject, // ✅ Pass full token object
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -41,7 +40,7 @@ async function fetchQBOData(realmId, accessToken, resource) {
 
     return JSON.parse(response.body);
   } catch (err) {
-    console.error('❌ QBO API Error Body:', err?.response?.body || err.message || err);
+    console.error('❌ QBO API Error:', err?.response?.body || err.message || err);
     throw err;
   }
 }
@@ -57,9 +56,9 @@ router.get('/:realmId/companyinfo', async (req, res) => {
     }
 
     const tokenData = doc.data();
-    const accessToken = await refreshTokenIfNeeded(realmId, tokenData);
+    const tokenObject = await refreshTokenIfNeeded(realmId, tokenData);
 
-    const companyInfo = await fetchQBOData(realmId, accessToken, `companyinfo/${realmId}`);
+    const companyInfo = await fetchQBOData(realmId, tokenObject, `companyinfo/${realmId}`);
     res.json(companyInfo);
   } catch (err) {
     console.error('❌ Failed to fetch companyinfo:', err?.response?.body || err.message);
@@ -84,9 +83,9 @@ router.get('/:realmId/:resource', async (req, res) => {
     }
 
     const tokenData = doc.data();
-    const accessToken = await refreshTokenIfNeeded(realmId, tokenData);
+    const tokenObject = await refreshTokenIfNeeded(realmId, tokenData);
 
-    const data = await fetchQBOData(realmId, accessToken, resource);
+    const data = await fetchQBOData(realmId, tokenObject, resource);
     res.json(data);
   } catch (err) {
     console.error(`❌ Failed to fetch ${resource}:`, err?.response?.body || err.message || err);
