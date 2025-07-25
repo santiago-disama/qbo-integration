@@ -22,12 +22,19 @@ function getBaseUrl() {
 
 // 📡 Request to QBO API
 async function fetchQBOData(realmId, accessToken, resource) {
-  const url = `${getBaseUrl()}/v3/company/${realmId}/${resource}`;
-  console.log(`🌐 QBO Request URL: ${url}`);
+  const baseUrl = getBaseUrl(process.env.ENVIRONMENT);
+  const url = `${baseUrl}/v3/company/${realmId}/${resource}`;
+
+  console.log('🌐 QBO Request URL:', url);
+  console.log('🔑 Using access_token:', accessToken.slice(0, 20) + '...');
 
   const response = await oauthClient.makeApiCall({
     url,
     token: accessToken,
+    method: 'GET',
+    headers: {
+      'Accept': 'application/json'
+    }
   });
 
   return JSON.parse(response.body);
