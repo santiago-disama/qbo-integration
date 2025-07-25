@@ -29,8 +29,7 @@ async function fetchQBOData(realmId, accessToken, resource) {
   console.log('🔑 Using access_token:', accessToken.slice(0, 20) + '...');
 
   try {
-    oauthClient.setToken({ access_token: accessToken });
-    const response = await oauthClient.makeApiCall(url);
+    const response = await oauthClient.makeApiCall(url, accessToken);
     return JSON.parse(response.body);
   } catch (err) {
     console.error('❌ QBO API Error Body:', err?.response?.body || err.message || err);
