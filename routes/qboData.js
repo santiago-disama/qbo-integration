@@ -1,84 +1,59 @@
 const express = require('express');
+const admin = require('firebase-admin');
 const OAuthClient = require('intuit-oauth');
-const { db } = require('../utils/firebase');
-const refreshTokenIfNeeded = require('../utils/refreshToken');
+const { refreshTokenIfNeeded } = require('../utils/refreshToken');
 
 const router = express.Router();
 
-// 🔐 Intuit OAuth Client Setup
-const oauthClient = new OAuthClient({
-  clientId: process.env.QBO_CLIENT_ID,
-  clientSecret: process.env.QBO_CLIENT_SECRET,
-  environment: process.env.ENVIRONMENT,
-  redirectUri: process.env.QBO_REDIRECT_URI,
-});
-
-// 🌍 Base URL for QBO API
-function getBaseUrl() {
-  return process.env.ENVIRONMENT === 'sandbox'
-    ? 'https://sandbox-quickbooks.api.intuit.com'
-    : 'https://quickbooks.api.intuit.com';
-}
-
-// 📡 General QBO API Fetcher
+// Generic function to fetch data from QBO
 async function fetchQBOData(realmId, accessToken, resource) {
-  const baseUrl = getBaseUrl();
-  const url = `${baseUrl}/v3/company/${realmId}/${resource}`;
+  const oauthClient = new OAuthClient({
+    clientId: process.env.QBO_CLIENT_ID,
+    clientSecret: process.env.QBO_CLIENT_SECRET,
+    environment: process.env.ENVIRONMENT,
+  });
 
-  console.log('🌐 QBO Request URL:', url);
-  console.log('🔑 Using access_token:', accessToken?.slice(0, 20) + '...');
-
-  // Set the token on the client
   oauthClient.setToken({ access_token: accessToken });
 
+  const url = `https://sandbox-quickbooks.api.intuit.com/v3/company/${realmId}/${resource}`;
   try {
-    // Only pass the URL string to makeApiCall
-    const response = await oauthClient.makeApiCall(url);
-    return JSON.parse(response.body);
+    const response = await oauthClient.makeApiCall({ url });
+    return response;
   } catch (err) {
-    console.error('❌ QBO API Error Body:', err?.response?.body || err.message || err);
+    console.error('Error fetching QBO data:', err);
     throw err;
   }
 }
 
-// ✅ Test route for companyinfo
-router.get('/:realmId/companyinfo', async (req, res) => {
+// GET /qbo/invoices/:realmId
+router.get('/invoices/:realmId', async (req, res) => {
   const { realmId } = req.params;
-  try {
-    const doc = await db.collection('qbo_tokens').doc(realmId).get();
-    if (!doc.exists) return res.status(404).send('❌ Token not found');
-
-    const tokenData = doc.data();
-    const accessToken = await refreshTokenIfNeeded(realmId, tokenData);
-
-    const info = await fetchQBOData(realmId, accessToken, `companyinfo/${realmId}`);
-    res.json(info);
-  } catch (err) {
-    console.error('❌ Failed to fetch companyinfo:', err?.response?.body || err.message);
-    res.status(500).send('❌ Failed to fetch companyinfo');
-  }
-});
-
-// 🚀 Generic QBO resource route: /qbo/:realmId/:resource
-router.get('/:realmId/:resource', async (req, res) => {
-  const { realmId, resource } = req.params;
-  const allowed = ['account', 'invoices', 'vendors', 'companyinfo'];
-  if (!allowed.includes(resource)) {
-    return res.status(400).send('❌ Invalid QBO resource.');
-  }
 
   try {
-    const doc = await db.collection('qbo_tokens').doc(realmId).get();
-    if (!doc.exists) return res.status(404).send('❌ Token not found');
+    // Pull stored token data from Firestore
+    const tokenDoc = await admin
+      .firestore()
+      .collection('qboTokens')
+      .doc(realmId)
+      .get();
 
-    const tokenData = doc.data();
+    if (!tokenDoc.exists) {
+      return res.status(404).json({ error: 'No token found for that realmId' });
+    }
+
+    const tokenData = tokenDoc.data();
     const accessToken = await refreshTokenIfNeeded(realmId, tokenData);
 
-    const data = await fetchQBOData(realmId, accessToken, resource);
-    res.json(data);
+    // Use the Query API to list all invoices
+    const response = await fetchQBOData(
+      realmId,
+      accessToken,
+      'query?query=select * from Invoice'
+    );
+
+    res.json(response);
   } catch (err) {
-    console.error(`❌ Failed to fetch ${resource}:`, err?.response?.body || err.message);
-    res.status(500).send(`❌ Failed to fetch ${resource}`);
+    res.status(500).json({ error: err.message });
   }
 });
 
